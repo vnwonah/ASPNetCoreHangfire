@@ -9,21 +9,37 @@ using AspNetCoreHangfire.Data;
 using AspNetCoreHangfire.Models;
 using Hangfire;
 using Microsoft.AspNetCore.Http;
+using System.IO;
+using AspNetCoreHangfire.Services;
 
 namespace AspNetCoreHangfire.Controllers
 {
     public class TodosController : Controller
     {
         private readonly AppDbContext _context;
+        private readonly TodoService _todoService;
 
-        public TodosController(AppDbContext context)
+        public TodosController(
+            AppDbContext context,
+            TodoService todoService)
         {
             _context = context;
+            _todoService = todoService;
         }
 
         // GET: Todos
         public async Task<IActionResult> Index()
         {
+            if(TempData["success"] is object)
+            {
+                ViewBag.Success = TempData["success"];
+            }
+            else if(TempData["error"] is object)
+            {
+                ViewBag.Error = TempData["error"];
+            }
+
+            TempData.Clear();
             return View(await _context.Todo.ToListAsync());
         }
 
@@ -47,12 +63,36 @@ namespace AspNetCoreHangfire.Controllers
 
         [HttpPost]
         public async Task<IActionResult> UploadFile(IFormFile file)
-        {
-            if (file == null || file.Length == 0)
-                return Content("file not selected");
+         {
+            try
+            {
+                if (file == null || file.Length == 0)
+                {
+                    TempData["error"] = "File not Selected";
+                    return RedirectToAction("Index");
+                }
+                    
 
+                var path = Path.Combine(
+                            Directory.GetCurrentDirectory(), "wwwroot",
+                            file.FileName);
 
-            return RedirectToAction("Files");
+                using (var stream = new FileStream(path, FileMode.Create))
+                {
+                    await file.CopyToAsync(stream);
+                }
+
+                BackgroundJob.Enqueue(() => _todoService.ProcessUploadedFile(path));
+                TempData["success"] = "The Todo Items are being created";
+
+            }
+            catch (Exception)
+            {
+                TempData["error"] = "An Error occured, please retry";
+            }
+           
+            
+            return RedirectToAction("Index");
         }
 
         // GET: Todos/Create
