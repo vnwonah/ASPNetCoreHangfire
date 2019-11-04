@@ -2,11 +2,15 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using AspNetCoreHangfire.Data;
+using Hangfire;
+using Hangfire.MemoryStorage;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.HttpsPolicy;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -31,6 +35,25 @@ namespace AspNetCoreHangfire
                 options.MinimumSameSitePolicy = SameSiteMode.None;
             });
 
+            services.AddDbContext<AppDbContext>(options => options.UseInMemoryDatabase("AppDb"));
+            services.AddHangfire(configuration => configuration
+           .SetDataCompatibilityLevel(CompatibilityLevel.Version_170)
+           .UseSimpleAssemblyNameTypeSerializer()
+           .UseRecommendedSerializerSettings()
+           .UseMemoryStorage()
+           //.UseSqlServerStorage(Configuration.GetConnectionString("HangfireConnection"), new SqlServerStorageOptions
+           //{
+           //    CommandBatchMaxTimeout = TimeSpan.FromMinutes(5),
+           //    SlidingInvisibilityTimeout = TimeSpan.FromMinutes(5),
+           //    QueuePollInterval = TimeSpan.Zero,
+           //    UseRecommendedIsolationLevel = true,
+           //    UsePageLocksOnDequeue = true,
+           //    DisableGlobalLocks = true
+           //})
+           );
+
+            // Add the processing server as IHostedService
+            services.AddHangfireServer();
 
             services.AddMvc().SetCompatibilityVersion(CompatibilityVersion.Version_2_2);
         }
@@ -51,13 +74,14 @@ namespace AspNetCoreHangfire
 
             app.UseHttpsRedirection();
             app.UseStaticFiles();
+            app.UseHangfireDashboard();
             app.UseCookiePolicy();
 
             app.UseMvc(routes =>
             {
                 routes.MapRoute(
                     name: "default",
-                    template: "{controller=Home}/{action=Index}/{id?}");
+                    template: "{controller=Todos}/{action=Index}/{id?}");
             });
         }
     }
